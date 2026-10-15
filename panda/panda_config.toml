@@ -1,0 +1,106 @@
+# =============================================================================
+#  PANDA  --  configuration   (phase 2: analysis)
+#  Diamond Light Source, beamline I10 / RASOR
+# =============================================================================
+#  Plain text. Edit with Notepad. Restart PANDA for changes to take effect.
+#
+#  This file is SEPARATE from rsxd_config.toml on purpose: the phase-1 logger
+#  owns that file and PANDA must not edit it. PANDA reads rsxd_config.toml for
+#  the things the logger already defines -- dat_dir (= raw_data), the .dat
+#  filename patterns, the analyser angles, the peaks, the cumulative CSV --
+#  and everything analysis-specific lives here.
+#
+#  Windows paths: use SINGLE quotes 'C:\like\this'  (no backslash escaping).
+# =============================================================================
+
+
+# ── COLUMN MAP  ←←←  THE ONE-LINE CHANGE POINT ───────────────────────────────
+#
+#  This is the only thing that must change when the first real theta-2theta
+#  tau-series arrives.
+#
+#  Why it is a setting and not hard-coded: the only real I10 files available
+#  when PANDA was written are XMCD *energy* scans
+#      cmd='scan energy 700 720 0.1 mcsh16 0.2 mcsh17 0.2 ...'
+#      columns: energy demand demand_diff pgm_energy pgm_energy_diff
+#               mcsh16 mcsh17 mcsh18 mcsh19
+#  A theta-2theta diffraction scan will have a different abscissa (the
+#  detector arm angle) and may well route the diode onto a different scaler
+#  channel. Guessing that into the code would bury it; guessing it into config
+#  makes it a one-line fix at the beamline.
+#
+#  abscissa_column   the scanned axis -> 2theta for a diffraction scan.
+#                    Empty string = "use whatever the first column is",
+#                    which is correct for every I10 scan file seen so far.
+#  i0_column         incident-beam monitor. mcsh16 carries the largest counts
+#                    in every real file and is the conventional I0 channel.
+#  im_column         the diffracted-beam detector.
+#
+#  PLACEHOLDER WARNING: i0_column and im_column below are informed guesses
+#  from the energy-scan files. mcsh19 is identically zero in all 248 real
+#  files, so it is certainly not a detector. Confirm against the first real
+#  theta-2theta scan before trusting Stage 1 output.
+#
+#  If a name listed here is not in the file, PANDA refuses to reduce it and
+#  tells you which columns the file actually has. It never guesses silently.
+[reduction]
+abscissa_column = ""
+i0_column       = "mcsh16"
+im_column       = "mcsh17"
+
+# Treat I0 values at or below this as unusable (avoids divide-by-zero and the
+# meaningless huge normalised values you get from a dropped beam).
+min_i0 = 1.0
+
+# Counting statistics. The scaler channels are photon counts, so sigma = sqrt(N).
+# If a channel is ever pre-scaled or averaged, set the gain (counts per unit)
+# so the Poisson errors stay honest.
+counts_per_unit = 1.0
+
+
+# ── PEAK INTEGRATION  (Stage 3a) ─────────────────────────────────────────────
+# Model-free is the default and is what the established RASOR method uses.
+# The Voigt fit is available as a cross-check, never as the default.
+[integration]
+method = "trapezoid"        # "trapezoid" (model-free) | "voigt"
+background = "linear"       # "linear" (from the window endpoints) | "none"
+
+# Default 2-theta window, used to pre-fill the boxes in the GUI. The operator
+# sets the real one per series; leave both at 0 to default to the full scan.
+window_min = 0.0
+window_max = 0.0
+
+
+# ── PATHS ────────────────────────────────────────────────────────────────────
+#   raw_dir        empty = use the logger's dat_dir from rsxd_config.toml.
+#                  Only set this if PANDA should read from somewhere else.
+#   processed_dir  empty = a "processed_data" folder beside the raw folder.
+#                  PANDA mirrors the raw layout underneath it.
+[paths]
+raw_dir       = ''
+processed_dir = ''
+
+
+# ── OUTPUT ───────────────────────────────────────────────────────────────────
+# format: "csv" (default) | "txt" | "dat"   -- txt/dat are whitespace-aligned
+# for gnuplot / FullProf-style consumers; csv is what the analysis scripts read.
+[output]
+format = "csv"
+
+
+# ── STAGE 4 PHYSICS READ-OUTS ────────────────────────────────────────────────
+# Reference values used to label a series as on- or off-resonance and as
+# field-on or field-off. These are labels for the comparison table only --
+# nothing is filtered out or discarded on the basis of them.
+[physics]
+# eV. A series whose mean pgm_energy is within resonance_tol_eV of one of
+# these is tagged with that edge's name.
+edges = [
+    { name = "Fe L3", energy_eV = 707.5 },
+    { name = "Co L3", energy_eV = 778.2 },
+    { name = "pre-edge", energy_eV = 695.0 },
+]
+resonance_tol_eV = 2.0
+
+# tesla. Series within field_tol_T of 0 are tagged "field off".
+field_tol_T = 0.005
